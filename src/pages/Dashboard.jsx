@@ -9,7 +9,7 @@ import CompanyPortfolio from '@/components/dashboard/CompanyPortfolio';
 import PipelineCard from '@/components/dashboard/PipelineCard';
 import UpcomingCard from '@/components/dashboard/UpcomingCard';
 import { useToast } from '@/components/ui/use-toast';
-import { balanceDue, isOpenInvoice, isOverdue, todayISO } from '@/lib/format';
+import { addDays, balanceDue, effectivePaymentStatus, isOpenInvoice, isOverdue, todayISO } from '@/lib/format';
 import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
 import EmptyState from '@/components/shared/EmptyState';
@@ -46,7 +46,7 @@ export default function Dashboard() {
         neon.entities.Lead.filter({}, { limit: 300 }),
         neon.entities.Project.filter({}, { limit: 200 }),
         neon.entities.Payment.filter({}, { limit: 300 }),
-        neon.entities.CalendarEvent.filter({ date: { $gte: today } }, { sort: 'date', limit: 20 }),
+        neon.entities.CalendarEvent.filter({ date: { $gte: today } }, { sort: 'date', limit: 200 }),
         neon.entities.SocialPost.filter({ scheduled_date: { $gte: today } }, { sort: 'scheduled_date', limit: 20 }),
       ]);
       setData({
@@ -93,11 +93,22 @@ export default function Dashboard() {
 
   const upcoming = useMemo(() => {
     const items = [];
-    data.events.forEach((e) => items.push({ date: e.date, label: e.title, meta: e.category, type: 'event' }));
+    data.events.filter((event) => event.status !== 'Cancelled').forEach((e) => items.push({ date: e.date, label: e.title, meta: e.category, type: 'event' }));
     data.social.forEach((s) => items.push({ date: s.scheduled_date, label: s.title, meta: `${companiesById[s.company_id]?.name || 'Client'} · ${s.platform}`, type: 'social' }));
     data.projects.filter((p) => p.status !== 'Completed' && p.deadline && p.deadline >= today).forEach((p) => items.push({ date: p.deadline, label: `${p.name} due`, meta: companiesById[p.company_id]?.name || 'Project', type: 'project' }));
     return items.sort((a, b) => String(a.date).localeCompare(String(b.date)));
   }, [data, companiesById, today]);
+  const eventReminders = useMemo(() => data.events
+    .filter((event) => event.status !== 'Cancelled')
+    .map((event) => ({ event, date: addDays(-2, event.date) }))
+    .filter(({ date }) => date >= today && date <= addDays(30))
+    .map(({ event, date }) => ({
+      date,
+      label: `Prepare for ${event.title}`,
+      meta: `Event ${event.date} · ${event.category || 'Calendar event'}`,
+      type: 'reminder',
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date)), [data.events, today]);
 
   const toggleTask = async (task) => {
     const done = task.status === 'Done';
@@ -211,7 +222,7 @@ export default function Dashboard() {
         <div className="lg:col-span-2">
           <TodayList tasks={focusTasks.slice(0, 7)} companiesById={companiesById} onToggle={toggleTask} />
         </div>
-        <ReceivablesCard payments={openPayments} companiesById={companiesById} outstanding={outstanding} />
+          <ReceivablesCard payments={openPayments.map((payment) => ({ ...payment, status: effectivePaymentStatus(payment) }))} companiesById={companiesById} outstanding={outstanding} />
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -221,6 +232,7 @@ export default function Dashboard() {
         <div className="space-y-4">
           <PipelineCard leads={data.leads.filter((lead) => !lead.is_demo)} />
           <UpcomingCard items={upcoming} />
+          <UpcomingCard items={eventReminders} title="Event reminders · 2 days before" />
         </div>
       </div>
 

@@ -19,7 +19,7 @@ import SeoTaskForm from '@/components/forms/SeoTaskForm';
 import SocialPostForm from '@/components/forms/SocialPostForm';
 import PaymentForm from '@/components/forms/PaymentForm';
 import NoteForm from '@/components/forms/NoteForm';
-import { balanceDue, fmtDate, inr, isOpenInvoice, relative, todayISO } from '@/lib/format';
+import { balanceDue, effectivePaymentStatus, fmtDate, inr, isOpenInvoice, relative, todayISO } from '@/lib/format';
 import { useAuth } from '@/lib/AuthContext';
 
 const TABS = ['Overview', 'Leads', 'Projects', 'Tasks', 'SEO', 'Social', 'Payments', 'Notes', 'Website'];
@@ -230,7 +230,7 @@ export default function CompanyDetail() {
                   </div>
                 </div>
                 <span className="hidden text-[10.5px] text-muted-foreground sm:block">due {fmtDate(p.deadline, { year: false })}</span>
-                <StatusBadge status={p.status} />
+                <StatusBadge status={effectivePaymentStatus(p)} />
                 {editBtn('project', p)}
                 <DeleteButton onConfirm={() => remove('Project', p)} label="project" />
               </div>

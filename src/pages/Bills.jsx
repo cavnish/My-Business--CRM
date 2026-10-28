@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Printer, FileDown, Receipt, Info, Save } from 'lucide-react';
+import { Printer, FileDown, Receipt, Info, Save, Plus, MonitorSmartphone } from 'lucide-react';
 import { neon } from '@/api/neonDataClient';
 import PageHeader from '@/components/shared/PageHeader';
 import BillDocument from '@/components/bills/BillDocument';
@@ -7,6 +7,8 @@ import EmptyState from '@/components/shared/EmptyState';
 import { useToast } from '@/components/ui/use-toast';
 import { balanceDue, inr, isOpenInvoice, monthKey, monthLabel, todayISO } from '@/lib/format';
 import { downloadCsv } from '@/lib/exportCsv';
+import InvoiceLineItemsEditor from '@/components/bills/InvoiceLineItemsEditor';
+import { invoiceSubtotal, lineAmount, savedLineItems } from '@/lib/invoiceItems';
 
 const MODES = [
   { key: 'invoice', label: 'Invoice' },
@@ -22,13 +24,15 @@ export default function Bills() {
   const [mode, setMode] = useState('combined');
   const [includeLeads, setIncludeLeads] = useState('none');
   const [includeProjects, setIncludeProjects] = useState(false);
-  const [discount, setDiscount] = useState(0);
+  const [discount, setDiscount] = useState('0');
   const [invoiceNo, setInvoiceNo] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(todayISO());
   const [dueDate, setDueDate] = useState('');
   const [nextFocus, setNextFocus] = useState('');
   const [user, setUser] = useState(null);
   const [records, setRecords] = useState({ tasks: [], seo: [], posts: [], projects: [], payments: [], leads: [] });
+  const [agreementTerms, setAgreementTerms] = useState({ website_one_time_fee_inr: 0 });
+  const [extraLinesByScope, setExtraLinesByScope] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -49,14 +53,16 @@ export default function Bills() {
     if (!companyId) return;
     setLoading(true);
     try {
-      const [tasks, seo, posts, projects, payments, leads] = await Promise.all([
+      const [tasks, seo, posts, projects, payments, leads, agreement] = await Promise.all([
         neon.entities.Task.filter({ company_id: companyId }, { limit: 300 }),
         neon.entities.SeoTask.filter({ company_id: companyId }, { limit: 200 }),
         neon.entities.SocialPost.filter({ company_id: companyId }, { limit: 200 }),
         neon.entities.Project.filter({ company_id: companyId }, { limit: 100 }),
         neon.entities.Payment.filter({ company_id: companyId }, { limit: 200 }),
         neon.entities.Lead.filter({ company_id: companyId }, { limit: 200 }),
+        neon.entities.CommercialAgreement.filter({ company_id: companyId }, { sort: '-updated_date', limit: 1 }),
       ]);
+      setAgreementTerms(agreement.items?.[0]?.terms || {});
       setRecords({
         tasks: tasks.items || [], seo: seo.items || [], posts: posts.items || [],
         projects: projects.items || [], payments: payments.items || [], leads: leads.items || [],
@@ -71,6 +77,18 @@ export default function Bills() {
   useEffect(() => { load(); }, [companyId]);
 
   const company = companies.find((c) => c.id === companyId);
+  const extraLinesKey = `${companyId}:${month}`;
+  const extraLines = extraLinesByScope[extraLinesKey] || [];
+
+  const addExtraLine = (line) => setExtraLinesByScope((current) => ({
+    ...current,
+    [extraLinesKey]: [...(current[extraLinesKey] || []), line],
+  }));
+
+  const updateExtraLines = (updated) => setExtraLinesByScope((current) => ({
+    ...current,
+    [extraLinesKey]: updated,
+  }));
 
   useEffect(() => {
     if (!company) return;
@@ -111,14 +129,22 @@ export default function Bills() {
     if (includeProjects) {
       completedProjects.forEach((p) => items.push({ description: `Project completed — ${p.name}`, qty: 1, rate: Number(p.fee), amount: Number(p.fee) }));
     }
+    items.push(...extraLines.map((item) => ({
+      ...item,
+      description: String(item.description || '').trim(),
+      qty: Number(item.qty) || 0,
+      rate: Number(item.rate) || 0,
+      amount: lineAmount(item),
+    })));
     return items;
-  }, [company, month, includeProjects, completedProjects]);
+  }, [company, month, includeProjects, completedProjects, extraLines]);
 
-  const subtotal = lines.reduce((s, l) => s + l.amount, 0);
+  const subtotal = invoiceSubtotal(lines);
+  const suggestedWebsiteFee = Number(agreementTerms.website_one_time_fee_inr) || 0;
   const discountValue = Number(discount) || 0;
   const taxRate = Number(company?.tax_rate || 0);
-  const taxAmount = Math.round(Math.max(0, subtotal - discountValue) * taxRate / 100);
-  const totalValue = subtotal - discountValue + taxAmount;
+  const taxAmount = Math.round(Math.max(0, subtotal) * taxRate / 100);
+  const totalValue = Math.max(0, subtotal + taxAmount - discountValue);
   const received = records.payments.filter((p) => !p.is_demo && String(p.payment_date).slice(0, 7) === month).reduce((s, p) => s + Number(p.amount_received || 0), 0);
   const outstandingOther = records.payments.filter((p) => isOpenInvoice(p) && p.period !== month).reduce((s, p) => s + balanceDue(p), 0);
   const previousBalance = outstandingOther + received;
@@ -149,19 +175,42 @@ export default function Bills() {
       toast({ title: 'Invoice already recorded', description: `${invoiceNo} already exists for this company.`, variant: 'destructive' });
       return;
     }
-    if (!lines.length) {
+    const savedItems = savedLineItems(lines);
+    const invalidExtraLine = extraLines.some((item) => (
+      !String(item.description || '').trim()
+      || !Number.isFinite(Number(item.qty))
+      || Number(item.qty) <= 0
+      || item.rate === ''
+      || item.rate === null
+      || item.rate === undefined
+      || !Number.isFinite(Number(item.rate))
+      || Number(item.rate) < 0
+    ));
+    if (!savedItems.length || invalidExtraLine || savedItems.some((item) => !item.description || item.qty <= 0 || item.rate < 0)) {
       toast({ title: 'Nothing to invoice', description: 'Set a monthly fee on the company or include a completed project.', variant: 'destructive' });
       return;
     }
+    if (discountValue < 0 || discountValue > subtotal + taxAmount) {
+      toast({ title: 'Check the discount', description: 'The discount must be non-negative and no greater than the invoice total.', variant: 'destructive' });
+      return;
+    }
+    const invoiceKind = savedItems.some((item) => /website.*one.?time/i.test(item.description))
+      ? 'Website one-time fee'
+      : savedItems.some((item) => /extra work/i.test(item.description))
+        ? 'Extra work'
+        : 'Monthly service fee';
     setSaving(true);
     try {
       await neon.entities.Payment.create({
         company_id: company.id,
         invoice_no: invoiceNo,
-        title: `${monthLabel(month)} — ${company.service_package || 'Monthly service'}`,
-        kind: 'Monthly service fee',
+        title: invoiceKind === 'Website one-time fee'
+          ? `${company.name} — Website one-time fee`
+          : `${monthLabel(month)} — ${company.service_package || 'Monthly service'}`,
+        kind: invoiceKind,
         period: month,
         amount: subtotal,
+        line_items: savedItems,
         tax_rate: taxRate,
         discount: discountValue,
         amount_received: 0,
@@ -256,6 +305,34 @@ export default function Bills() {
               <input type="checkbox" checked={includeProjects} onChange={(e) => setIncludeProjects(e.target.checked)} className="accent-[#1F4D3D]" />
               Add completed project fees ({completedProjects.length})
             </label>
+          </div>
+
+          <div className="mt-4 border-t border-border pt-4">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-[12.5px] font-medium">Additional invoice items</h3>
+                <p className="mt-0.5 text-[10.5px] text-muted-foreground">
+                  Add website setup or extra work charges. {suggestedWebsiteFee ? `The ₹${suggestedWebsiteFee.toLocaleString('en-IN')} website figure is only an unconfirmed planning reference; verify before billing.` : 'Enter the actual agreed amount before saving.'}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => addExtraLine({ description: 'Extra work', qty: 1, rate: '' })}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] hover:bg-muted"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Extra work
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addExtraLine({ description: 'Website one-time fee', qty: 1, rate: suggestedWebsiteFee || '' })}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] hover:bg-muted"
+                >
+                  <MonitorSmartphone className="h-3.5 w-3.5" /> Website fee
+                </button>
+              </div>
+            </div>
+            <InvoiceLineItemsEditor items={extraLines} onChange={updateExtraLines} />
           </div>
 
           {mode !== 'invoice' && (

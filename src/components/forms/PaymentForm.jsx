@@ -8,6 +8,9 @@ import { Field, SelectInput } from '@/components/shared/Field';
 import { useToast } from '@/components/ui/use-toast';
 import { PAYMENT_KINDS } from '@/lib/constants';
 import { monthKey, todayISO } from '@/lib/format';
+import InvoiceLineItemsEditor from '@/components/bills/InvoiceLineItemsEditor';
+import { invoiceItemsForPayment, invoiceSubtotal, savedLineItems } from '@/lib/invoiceItems';
+import { inr } from '@/lib/format';
 
 const blank = {
   company_id: '', invoice_no: '', title: '', kind: 'Monthly service fee', period: monthKey(),
@@ -16,25 +19,66 @@ const blank = {
   last_follow_up: '', expected_payment_date: '', notes: '',
 };
 
-export default function PaymentForm({ open, onOpenChange, companies = [], companyId, payment, onSaved }) {
+export default function PaymentForm({ open, onOpenChange, companies = [], companyId, payment, initialKind, onSaved }) {
   const [form, setForm] = useState(blank);
   const [saving, setSaving] = useState(false);
+  const [lineItems, setLineItems] = useState([]);
   const { toast } = useToast();
 
   useEffect(() => {
-    if (open) setForm(payment ? { ...blank, ...payment } : { ...blank, company_id: companyId || companies[0]?.id || '' });
-  }, [open, payment, companyId]);
+    if (open) {
+      setForm(payment ? { ...blank, ...payment } : {
+        ...blank,
+        company_id: companyId || companies[0]?.id || '',
+        kind: initialKind || blank.kind,
+        title: initialKind === 'Website one-time fee' ? 'Website one-time fee' : '',
+      });
+      setLineItems(payment
+        ? invoiceItemsForPayment(payment)
+        : [{ description: initialKind === 'Website one-time fee' ? 'Website one-time fee' : '', note: '', qty: 1, rate: '' }]);
+    }
+  }, [open, payment, companyId, initialKind]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const save = async () => {
     if (!form.title.trim() || !form.company_id) return;
+    const savedItems = savedLineItems(lineItems);
+    const invalidInputLine = lineItems.some((item) => (
+      !Number.isFinite(Number(item.qty))
+      || Number(item.qty) <= 0
+      || item.rate === ''
+      || item.rate === null
+      || item.rate === undefined
+      || !Number.isFinite(Number(item.rate))
+      || Number(item.rate) < 0
+    ));
+    if (!savedItems.length || invalidInputLine || savedItems.some((item) => (
+      !item.description
+      || !Number.isFinite(Number(item.qty))
+      || item.qty <= 0
+      || !Number.isFinite(Number(item.rate))
+      || item.rate < 0
+    ))) {
+      toast({ title: 'Check the invoice line items', description: 'Each line needs a description, a quantity greater than zero, and an entered non-negative rate.', variant: 'destructive' });
+      return;
+    }
+    const taxRate = form.tax_rate === '' || form.tax_rate === null ? 0 : Number(form.tax_rate);
+    const discount = Number(form.discount) || 0;
+    if (!Number.isFinite(taxRate) || taxRate < 0 || !Number.isFinite(discount) || discount < 0
+      || discount > invoiceSubtotal(savedItems) * (1 + taxRate / 100)) {
+      toast({ title: 'Check tax and discount', description: 'Tax and discount must be non-negative, and the discount cannot exceed the invoice total.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     const payload = {
       ...form,
-      amount: Number(form.amount) || 0,
-      tax_rate: form.tax_rate === '' || form.tax_rate === null ? null : Number(form.tax_rate),
-      discount: Number(form.discount) || 0,
+      invoice_no: String(form.invoice_no || '').trim() || null,
+      title: form.title.trim(),
+      line_items: savedItems,
+      amount: invoiceSubtotal(savedItems),
+      tax_rate: form.tax_rate === '' || form.tax_rate === null ? null : taxRate,
+      discount,
       amount_received: Number(payment?.amount_received) || 0,
       invoice_date: form.invoice_date || null,
       due_date: form.due_date || null,
@@ -46,6 +90,16 @@ export default function PaymentForm({ open, onOpenChange, companies = [], compan
       status: payment?.status || 'Pending',
     };
     try {
+      if (payload.invoice_no) {
+        const duplicate = await neon.entities.Payment.filter({
+          company_id: form.company_id,
+          invoice_no: payload.invoice_no,
+        }, { limit: 1 });
+        if (duplicate.items?.some((item) => item.id !== payment?.id)) {
+          toast({ title: 'Invoice number already exists', description: 'Choose a unique invoice number for this company.', variant: 'destructive' });
+          return;
+        }
+      }
       if (payment) await neon.entities.Payment.update(payment.id, payload);
       else await neon.entities.Payment.create(payload);
       onOpenChange(false);
@@ -69,7 +123,16 @@ export default function PaymentForm({ open, onOpenChange, companies = [], compan
           <Field label="Description" className="sm:col-span-2"><Input value={form.title} onChange={(e) => set('title', e.target.value)} /></Field>
           <Field label="Type"><SelectInput value={form.kind} onChange={(v) => set('kind', v)} options={PAYMENT_KINDS} allowEmpty={false} /></Field>
           <Field label="Billing period"><Input type="month" value={form.period || ''} onChange={(e) => set('period', e.target.value)} /></Field>
-          <Field label="Base amount (₹)"><Input type="number" value={form.amount} onChange={(e) => set('amount', e.target.value)} /></Field>
+          <div className="sm:col-span-2">
+            <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h3 className="text-[12px] font-medium">Invoice items</h3>
+                <p className="text-[10.5px] text-muted-foreground">Add monthly fees, one-time website work, and extra charges as separate priced rows.</p>
+              </div>
+              <p className="text-[12px]">Subtotal <span className="num font-medium">{inr(invoiceSubtotal(lineItems))}</span></p>
+            </div>
+            <InvoiceLineItemsEditor items={lineItems} onChange={setLineItems} />
+          </div>
           <Field label="Tax rate (%)"><Input type="number" value={form.tax_rate ?? ''} onChange={(e) => set('tax_rate', e.target.value)} /></Field>
           <Field label="Discount (₹)"><Input type="number" value={form.discount} onChange={(e) => set('discount', e.target.value)} /></Field>
           <Field label="Invoice status">

@@ -1,15 +1,15 @@
 import React from 'react';
-import { CalendarDays, Megaphone, FolderKanban, Sparkles } from 'lucide-react';
+import { CalendarDays, Megaphone, FolderKanban, Sparkles, BellRing } from 'lucide-react';
 import { fmtDay } from '@/lib/format';
 
-const ICONS = { event: CalendarDays, social: Megaphone, project: FolderKanban };
+const ICONS = { event: CalendarDays, social: Megaphone, project: FolderKanban, reminder: BellRing };
 
-export default function UpcomingCard({ items = [] }) {
+export default function UpcomingCard({ items = [], title = 'Next 10 days' }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-5">
       <div className="flex items-center gap-2">
         <Sparkles className="h-3.5 w-3.5 text-[#C98B54]" />
-        <h2 className="text-[13px] font-medium">Next 10 days</h2>
+        <h2 className="text-[13px] font-medium">{title}</h2>
       </div>
       <div className="mt-3 space-y-2.5">
         {items.length === 0 && <p className="py-6 text-center text-[12px] text-muted-foreground">Nothing on the horizon.</p>}

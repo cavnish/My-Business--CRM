@@ -38,6 +38,9 @@ The application uses Neon Managed Auth and Neon PostgreSQL for its business reco
 - Clearly labeled `DEMO` records are provided for leads, projects, tasks, payments, SEO, social planning, project templates, and recurring schedules. Demo schedules are disabled, demo projects are Planned, demo tasks are not completed, and demo payment rows are excluded from actual invoice/payment totals.
 - Historical agreements and actual payment transactions have separate tables. Secret values are not stored in ordinary application tables; credential records contain references only.
 - Automated email, scheduled reminders, and social publishing stay disabled until configured. Actual receipts are recorded only after a user action and are stored in the separate transaction ledger.
+- Calendar visits check Nager.Date for Indian public holidays once per local day, with a manual refresh option; imported dates and curated global observances are saved as calendar events. The dashboard derives event reminders for two days before each date. Post-planning tasks are created only when requested and use stable keys to avoid duplicates.
+- Social post links can import public embed metadata where the provider allows it. Fetching sends the URL to Noembed and the post's public embed provider; private content, captions, and performance metrics may not be available without platform authorization.
+- Invoices support saved, editable line items for recurring fees, website setup, and extra work. Website fees remain unbilled until explicitly added to an invoice, and collection is tracked through recorded receipts rather than assumed from the fee reference.
 
 ## Legacy data migration
 

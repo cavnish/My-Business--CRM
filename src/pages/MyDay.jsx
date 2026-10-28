@@ -6,7 +6,7 @@ import PageHeader from '@/components/shared/PageHeader';
 import TodayList from '@/components/dashboard/TodayList';
 import { useToast } from '@/components/ui/use-toast';
 import StatusBadge from '@/components/shared/StatusBadge';
-import { balanceDue, fmtDay, inr, todayISO, total } from '@/lib/format';
+import { balanceDue, effectivePaymentStatus, fmtDay, inr, isOpenInvoice, todayISO, total } from '@/lib/format';
 
 export default function MyDay() {
   const { toast } = useToast();
@@ -38,7 +38,7 @@ export default function MyDay() {
   const overdue = data.tasks.filter((t) => t.status !== 'Done' && t.due_date && String(t.due_date).slice(0, 10) < today);
   const completedToday = data.tasks.filter((t) => t.status === 'Done' && String(t.completed_date).slice(0, 10) === today);
   const followUps = data.leads.filter((l) => l.next_follow_up && l.next_follow_up <= today && !['Won', 'Lost'].includes(l.status));
-  const paymentPrompts = data.payments.filter((p) => ['Pending', 'Partially Paid', 'Overdue'].includes(p.status) && p.next_reminder && p.next_reminder <= today);
+  const paymentPrompts = data.payments.filter((p) => isOpenInvoice(p) && ['Pending', 'Partially Paid', 'Overdue'].includes(effectivePaymentStatus(p)) && p.next_reminder && p.next_reminder <= today);
   const hoursPlanned = total([...todayTasks, ...overdue], 'estimate_hours');
   const hoursDone = total(completedToday, 'estimate_hours');
 

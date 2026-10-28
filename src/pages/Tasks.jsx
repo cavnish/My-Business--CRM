@@ -20,7 +20,10 @@ export default function Tasks() {
   const [tasks, setTasks] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [view, setView] = useState('Today');
+  const [view, setView] = useState(() => {
+    const requestedView = new URLSearchParams(window.location.search).get('view');
+    return VIEWS.includes(requestedView) ? requestedView : 'Today';
+  });
   const [layout, setLayout] = useState('list');
   const [companyId, setCompanyId] = useState('all');
   const [category, setCategory] = useState('all');

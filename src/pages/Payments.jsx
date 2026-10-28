@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Download, Wallet, Search, AlertTriangle } from 'lucide-react';
+import { Plus, Download, Wallet, Search, AlertTriangle, Bell } from 'lucide-react';
 import { neon } from '@/api/neonDataClient';
 import PageHeader from '@/components/shared/PageHeader';
 import StatusBadge from '@/components/shared/StatusBadge';
@@ -9,7 +9,7 @@ import PaymentReceiptForm from '@/components/forms/PaymentReceiptForm';
 import EmptyState from '@/components/shared/EmptyState';
 import useNewQuery from '@/hooks/useNewQuery';
 import { downloadCsv } from '@/lib/exportCsv';
-import { balanceDue, fmtDate, inr, invoiceTotal, isOpenInvoice, monthKey, relative, todayISO } from '@/lib/format';
+import { balanceDue, effectivePaymentStatus, fmtDate, inr, invoiceTotal, isOpenInvoice, monthKey, relative, todayISO } from '@/lib/format';
 import { PAYMENT_STATUS } from '@/lib/constants';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -23,18 +23,16 @@ export default function Payments() {
   const [search, setSearch] = useState('');
   const [formOpen, setFormOpen] = useNewQuery();
   const [editing, setEditing] = useState(null);
+  const [newPaymentKind, setNewPaymentKind] = useState('');
   const [receiptInvoice, setReceiptInvoice] = useState(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [settlingId, setSettlingId] = useState(null);
 
   const load = async () => {
-    const query = {};
-    if (companyId !== 'all') query.company_id = companyId;
-    if (status !== 'All') query.status = status;
-    if (search.trim()) query.invoice_no = { $regex: search.trim() };
     try {
       const [payRes, companyRes, transactionRes] = await Promise.all([
-        neon.entities.Payment.filter(query, { sort: '-due_date', limit: 300 }),
+        neon.entities.Payment.list({ sort: '-due_date', limit: 300 }),
         neon.entities.Company.list({ limit: 60 }),
         neon.entities.PaymentTransaction.filter(companyId === 'all' ? {} : { company_id: companyId }, { sort: '-received_on', limit: 500 }),
       ]);
@@ -54,17 +52,25 @@ export default function Payments() {
   }, [companyId, status, search]);
 
   const companiesById = useMemo(() => Object.fromEntries(companies.map((c) => [c.id, c])), [companies]);
+  const visiblePayments = useMemo(() => payments.filter((payment) => {
+    const matchesCompany = companyId === 'all' || payment.company_id === companyId;
+    const matchesStatus = status === 'All' || effectivePaymentStatus(payment) === status;
+    const needle = search.trim().toLowerCase();
+    const matchesSearch = !needle || [payment.invoice_no, payment.title, companiesById[payment.company_id]?.name]
+      .some((value) => String(value || '').toLowerCase().includes(needle));
+    return matchesCompany && matchesStatus && matchesSearch;
+  }), [payments, companyId, status, search, companiesById]);
   const invoicesById = useMemo(() => Object.fromEntries(payments.map((p) => [p.id, p])), [payments]);
-  const openInvoices = payments.filter(isOpenInvoice);
+  const openInvoices = visiblePayments.filter(isOpenInvoice);
   const outstanding = openInvoices.reduce((s, p) => s + balanceDue(p), 0);
   const overdue = openInvoices.filter((p) => p.due_date && p.due_date < todayISO());
   const receivedThisMonth = payments
     .filter((p) => !p.is_demo && p.payment_date && String(p.payment_date).slice(0, 7) === monthKey())
     .reduce((s, p) => s + Number(p.amount_received || 0), 0);
-  const drafts = payments.filter((p) => p.status === 'Draft');
+  const drafts = visiblePayments.filter((p) => effectivePaymentStatus(p) === 'Draft');
 
   const exportPayments = () => {
-    downloadCsv(`payments-${todayISO()}.csv`, payments, [
+    downloadCsv(`payments-${todayISO()}.csv`, visiblePayments.map((payment) => ({ ...payment, display_status: effectivePaymentStatus(payment) })), [
       { label: 'Invoice', key: 'invoice_no' },
       { label: 'Client', value: (r) => companiesById[r.company_id]?.name || '' },
       { label: 'Description', key: 'title' },
@@ -72,7 +78,7 @@ export default function Payments() {
       { label: 'Total', value: (r) => invoiceTotal(r) },
       { label: 'Received', key: 'amount_received' },
       { label: 'Balance', value: (r) => balanceDue(r) },
-      { label: 'Status', key: 'status' },
+      { label: 'Status', key: 'display_status' },
       { label: 'Due date', key: 'due_date' },
       { label: 'Reason pending', key: 'pending_reason' },
       { label: 'Next reminder', key: 'next_reminder' },
@@ -82,20 +88,42 @@ export default function Payments() {
 
   const markPaid = async (payment) => {
     const remaining = balanceDue(payment);
-    if (!isOpenInvoice(payment) || remaining <= 0) return;
+    if (!isOpenInvoice(payment) || remaining <= 0 || settlingId) return;
+    if (!globalThis.crypto?.randomUUID) {
+      toast({ title: 'Secure settlement key unavailable', description: 'Use a modern browser to mark an invoice paid.', variant: 'destructive' });
+      return;
+    }
+    setSettlingId(payment.id);
     try {
-      await neon.payments.recordReceipt({
+      const recorded = await neon.payments.recordReceipt({
         invoiceId: payment.id,
         amount: remaining,
         receivedOn: todayISO(),
         method: null,
         reference: null,
-        notes: null,
-        idempotencyKey: `full-settlement-${payment.id}-${payment.amount_received || 0}`,
+        notes: 'Balance settled from Payments.',
+        idempotencyKey: `full-settlement-${payment.id}-${globalThis.crypto.randomUUID()}`,
       });
+      const settled = Array.isArray(recorded) ? recorded[0] : recorded;
+      if (settled?.id) {
+        setPayments((current) => current.map((item) => item.id === payment.id ? settled : item));
+      }
       await load();
+      toast({ title: 'Invoice marked paid', description: 'The remaining balance was recorded as a receipt in the transaction ledger.' });
     } catch (error) {
       toast({ title: 'Could not record receipt', description: error?.message || 'Please try again.', variant: 'destructive' });
+    } finally {
+      setSettlingId(null);
+    }
+  };
+
+  const scheduleReminder = async (payment) => {
+    try {
+      await neon.entities.Payment.update(payment.id, { next_reminder: todayISO() });
+      await load();
+      toast({ title: 'Reminder scheduled', description: 'This invoice will be included in the next configured payment-reminder email.' });
+    } catch (error) {
+      toast({ title: 'Could not schedule reminder', description: error?.message || 'Please try again.', variant: 'destructive' });
     }
   };
 
@@ -108,7 +136,8 @@ export default function Payments() {
         actions={
           <>
             <button onClick={exportPayments} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-[12px] text-muted-foreground hover:text-foreground"><Download className="h-3.5 w-3.5" /> Export</button>
-            <button onClick={() => { setEditing(null); setFormOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" /> Create invoice</button>
+            <button onClick={() => { setEditing(null); setNewPaymentKind(''); setFormOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground"><Plus className="h-3.5 w-3.5" /> Create invoice</button>
+            <button onClick={() => { setEditing(null); setNewPaymentKind('Website one-time fee'); setFormOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground"><Plus className="h-3.5 w-3.5" /> Website fee</button>
           </>
         }
       />
@@ -147,7 +176,7 @@ export default function Payments() {
 
       {loading ? (
         <div className="h-64 animate-pulse rounded-2xl border border-border bg-card/60" />
-      ) : payments.length === 0 ? (
+      ) : visiblePayments.length === 0 ? (
         <EmptyState icon={Wallet} title="No invoices in this view" description="Create an invoice to start tracking what is due and what has landed." action={<button onClick={() => { setEditing(null); setFormOpen(true); }} className="rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground">Create an invoice</button>} />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -167,8 +196,9 @@ export default function Payments() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/70">
-                {payments.map((p) => {
-                  const isOverdueRow = isOpenInvoice(p) && p.due_date && p.due_date < todayISO();
+                {visiblePayments.map((p) => {
+                  const effectiveStatus = effectivePaymentStatus(p);
+                  const isOverdueRow = effectiveStatus === 'Overdue';
                   return (
                     <tr key={p.id} className="cursor-pointer align-top transition hover:bg-muted/25" onClick={() => { setEditing(p); setFormOpen(true); }}>
                       <td className="px-4 py-3">
@@ -184,11 +214,11 @@ export default function Payments() {
                         <span className={isOverdueRow ? 'font-medium text-destructive' : 'text-muted-foreground'}>{fmtDate(p.due_date, { year: false })}</span>
                         {isOpenInvoice(p) && p.due_date && <span className="block text-[10px] text-muted-foreground">{relative(p.due_date)}</span>}
                       </td>
-                      <td className="px-3 py-3"><StatusBadge status={p.status} /></td>
+                      <td className="px-3 py-3"><StatusBadge status={effectiveStatus} /></td>
                       <td className="max-w-[190px] px-3 py-3">
                         {p.pending_reason ? (
                           <p className="line-clamp-2 text-[10.5px] leading-snug text-muted-foreground">{p.pending_reason}</p>
-                        ) : p.status === 'Paid' ? (
+                        ) : effectiveStatus === 'Paid' ? (
                           <p className="text-[10.5px] text-emerald-700">Settled {p.payment_date ? fmtDate(p.payment_date, { year: false }) : ''}</p>
                         ) : (
                           <p className="text-[10.5px] text-muted-foreground">No reason noted</p>
@@ -200,7 +230,8 @@ export default function Payments() {
                           {isOpenInvoice(p) && (
                             <>
                               <button onClick={() => { setReceiptInvoice(p); setReceiptOpen(true); }} className="rounded-md border border-border px-1.5 py-0.5 text-[10px] hover:bg-muted">Add receipt</button>
-                              {balanceDue(p) > 0 && <button onClick={() => markPaid(p)} className="rounded-md border border-border px-1.5 py-0.5 text-[10px] hover:bg-muted">Settle balance</button>}
+                              <button onClick={() => scheduleReminder(p)} className="rounded-md border border-border px-1.5 py-0.5 text-[10px] hover:bg-muted"><Bell className="mr-1 inline h-2.5 w-2.5" />Remind</button>
+                              {balanceDue(p) > 0 && <button disabled={settlingId === p.id} onClick={() => markPaid(p)} className="rounded-md border border-border px-1.5 py-0.5 text-[10px] hover:bg-muted disabled:cursor-wait disabled:opacity-60">{settlingId === p.id ? 'Marking…' : 'Mark paid'}</button>}
                             </>
                           )}
                           <DeleteButton onConfirm={async () => { await neon.entities.Payment.delete(p.id); load(); }} label="invoice" />
@@ -236,7 +267,7 @@ export default function Payments() {
         )}
       </section>
 
-      <PaymentForm open={formOpen} onOpenChange={(v) => { setFormOpen(v); if (!v) setEditing(null); }} companies={companies} companyId={companyId !== 'all' ? companyId : ''} payment={editing} onSaved={load} />
+      <PaymentForm open={formOpen} onOpenChange={(v) => { setFormOpen(v); if (!v) { setEditing(null); setNewPaymentKind(''); } }} companies={companies} companyId={companyId !== 'all' ? companyId : ''} payment={editing} initialKind={newPaymentKind} onSaved={load} />
       <PaymentReceiptForm
         open={receiptOpen}
         onOpenChange={(open) => {

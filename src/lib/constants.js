@@ -28,7 +28,7 @@ export const POST_STATUS = ['Idea', 'Draft', 'Awaiting Approval', 'Approved', 'S
 export const PAYMENT_STATUS = ['Draft', 'Pending', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled'];
 
 export const PAYMENT_KINDS = [
-  'Monthly service fee', 'Website development', 'SEO', 'Social media', 'Project fee',
+  'Monthly service fee', 'Website development', 'Website one-time fee', 'SEO', 'Social media', 'Project fee',
   'Order commission', 'Extra work',
 ];
 
@@ -39,7 +39,9 @@ export const SERVICE_OPTIONS = [
 
 export const EVENT_CATEGORIES = [
   'Festival', 'Indian national day', 'Global observance', 'Industry event',
-  'Client date', 'Company event', 'Renewal', 'Custom event',
+  'Client date', 'Company event', 'Renewal', 'Custom event', 'Official holiday',
+  'International observance', 'Awareness day', 'Birth anniversary', 'Death anniversary',
+  'Historical event', 'Invention or discovery', 'Cultural heritage',
 ];
 
 export const PRIORITIES = ['Low', 'Medium', 'High'];

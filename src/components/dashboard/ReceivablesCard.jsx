@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, AlertCircle } from 'lucide-react';
 import StatusBadge from '@/components/shared/StatusBadge';
-import { balanceDue, fmtDate, inr, relative } from '@/lib/format';
+import { balanceDue, effectivePaymentStatus, fmtDate, inr, relative } from '@/lib/format';
 
 export default function ReceivablesCard({ payments = [], companiesById = {}, outstanding = 0 }) {
   const top = [...payments].sort((a, b) => String(a.due_date || '').localeCompare(String(b.due_date || ''))).slice(0, 4);
@@ -26,7 +26,7 @@ export default function ReceivablesCard({ payments = [], companiesById = {}, out
               <span className="num shrink-0 text-[12.5px] font-medium">{inr(balanceDue(p))}</span>
             </div>
             <div className="mt-1.5 flex items-center justify-between">
-              <StatusBadge status={p.status} />
+              <StatusBadge status={effectivePaymentStatus(p)} />
               {p.next_reminder && (
                 <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                   <AlertCircle className="h-2.5 w-2.5" /> {relative(p.next_reminder)}

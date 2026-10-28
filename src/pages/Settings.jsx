@@ -28,6 +28,9 @@ export default function Settings() {
   const { toast } = useToast();
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [greetingReminder, setGreetingReminder] = useState({ daily_greeting_enabled: false, payment_reminder_enabled: false, timezone: 'Asia/Kolkata', local_time: '08:00', recipient_email: '' });
+  const [greetingReminderId, setGreetingReminderId] = useState(null);
+  const [savingGreetingReminder, setSavingGreetingReminder] = useState(false);
   const [counts, setCounts] = useState({ companies: 0, leads: 0, projects: 0, tasks: 0 });
   const [notifyPermission, setNotifyPermission] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
 
@@ -65,6 +68,30 @@ export default function Settings() {
 
   useEffect(() => {
     if (!isAdmin) return;
+    let active = true;
+    neon.entities.ReminderPreference.filter({ company_id: null }, { limit: 10 })
+      .then((result) => {
+        if (!active) return;
+        const saved = result.items?.[0];
+        setGreetingReminderId(saved?.id || null);
+        setGreetingReminder({
+          daily_greeting_enabled: Boolean(saved?.daily_greeting_enabled),
+          payment_reminder_enabled: Boolean(saved?.payment_reminder_enabled),
+          timezone: saved?.timezone || 'Asia/Kolkata',
+          local_time: saved?.local_time || '08:00',
+          recipient_email: saved?.recipient_email || user?.email || '',
+        });
+      })
+      .catch((error) => {
+        if (active) {
+          toast({ title: 'Could not load email reminder settings', description: error?.message || 'Please try again.', variant: 'destructive' });
+        }
+      });
+    return () => { active = false; };
+  }, [isAdmin, user?.email, toast]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
     const loadCounts = async () => {
       try {
         const [companies, leads, projects, tasks] = await Promise.all([
@@ -98,6 +125,41 @@ export default function Settings() {
       toast({ title: 'Could not save settings', description: error?.message || 'Please try again.', variant: 'destructive' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveGreetingReminder = async () => {
+    const recipient = greetingReminder.recipient_email.trim();
+    if ((greetingReminder.daily_greeting_enabled || greetingReminder.payment_reminder_enabled) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+      toast({ title: 'Enter a valid reminder email', description: 'A valid recipient is required to enable email reminders.', variant: 'destructive' });
+      return;
+    }
+    setSavingGreetingReminder(true);
+    try {
+      const payload = {
+        company_id: null,
+        daily_greeting_enabled: Boolean(greetingReminder.daily_greeting_enabled),
+        payment_reminder_enabled: Boolean(greetingReminder.payment_reminder_enabled),
+        timezone: 'Asia/Kolkata',
+        local_time: '08:00',
+        email_provider: 'Resend',
+        recipient_email: recipient || null,
+        status: greetingReminder.daily_greeting_enabled || greetingReminder.payment_reminder_enabled ? 'Enabled' : 'Disabled',
+      };
+      const saved = greetingReminderId
+        ? await neon.entities.ReminderPreference.update(greetingReminderId, payload)
+        : await neon.entities.ReminderPreference.create(payload);
+      setGreetingReminderId(saved.id);
+      toast({
+        title: 'Email reminder preferences saved',
+        description: greetingReminder.daily_greeting_enabled || greetingReminder.payment_reminder_enabled
+          ? 'Email delivery also requires the scheduled Neon function, a Resend API key, and a verified sender address.'
+          : 'Automatic reminder emails are disabled.',
+      });
+    } catch (error) {
+      toast({ title: 'Could not save email reminders', description: error?.message || 'Please try again.', variant: 'destructive' });
+    } finally {
+      setSavingGreetingReminder(false);
     }
   };
 
@@ -224,13 +286,44 @@ export default function Settings() {
                 </label>
               ))}
             </div>
+            {isAdmin && (
+              <div className="mt-4 rounded-xl border border-border p-3">
+                <label className="flex items-start gap-2 text-[12px]">
+                  <input
+                    type="checkbox"
+                    checked={greetingReminder.daily_greeting_enabled}
+                    onChange={(event) => setGreetingReminder((current) => ({ ...current, daily_greeting_enabled: event.target.checked }))}
+                    className="mt-0.5 accent-[#1F4D3D]"
+                  />
+                  <span><span className="font-medium">Email me one day before an event</span><span className="mt-0.5 block text-[10.5px] text-muted-foreground">Only when no linked greeting post exists and its task is still open.</span></span>
+                </label>
+                <label className="mt-3 flex items-start gap-2 text-[12px]">
+                  <input
+                    type="checkbox"
+                    checked={greetingReminder.payment_reminder_enabled}
+                    onChange={(event) => setGreetingReminder((current) => ({ ...current, payment_reminder_enabled: event.target.checked }))}
+                    className="mt-0.5 accent-[#1F4D3D]"
+                  />
+                  <span><span className="font-medium">Email me when a payment reminder is due</span><span className="mt-0.5 block text-[10.5px] text-muted-foreground">Use the Remind action on an open invoice to queue it for the next scheduled email.</span></span>
+                </label>
+                <div className="mt-3 flex flex-wrap items-end gap-2">
+                  <Field label="Reminder email" className="min-w-[220px] flex-1">
+                    <Input type="email" autoComplete="email" value={greetingReminder.recipient_email} onChange={(event) => setGreetingReminder((current) => ({ ...current, recipient_email: event.target.value }))} placeholder="you@company.com" />
+                  </Field>
+                  <Button type="button" variant="outline" onClick={saveGreetingReminder} disabled={savingGreetingReminder} className="mb-0.5">
+                    {savingGreetingReminder ? 'Saving…' : 'Save reminder'}
+                  </Button>
+                </div>
+                <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">Scheduled daily for 8:00 AM India time. Email delivery requires the server-side Neon reminder function and Resend credentials; no API key is stored in this browser.</p>
+              </div>
+            )}
             <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl bg-muted/60 px-3 py-2.5">
               <span className="text-[11.5px] text-muted-foreground">Browser notifications: {notifyPermission}</span>
               {notifyPermission !== 'granted' && (
                 <button onClick={askPermission} className="ml-auto rounded-md border border-border bg-card px-2 py-1 text-[11px]">Allow in browser</button>
               )}
             </div>
-            <p className="mt-2 text-[10.5px] text-muted-foreground">Email and SMS reminders need an email provider and are not connected yet.</p>
+            <p className="mt-2 text-[10.5px] text-muted-foreground">Task reminders appear in the app. Event emails are sent only after the scheduled mail function and verified sender are configured.</p>
           </div>
         </div>
 
