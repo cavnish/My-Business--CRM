@@ -1,0 +1,79 @@
+{
+  "name": "Payment",
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string"
+    },
+    "invoice_no": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "default": "Monthly service fee"
+    },
+    "period": {
+      "type": "string"
+    },
+    "amount": {
+      "type": "number",
+      "default": 0
+    },
+    "tax_rate": {
+      "type": "number",
+      "default": 18
+    },
+    "discount": {
+      "type": "number",
+      "default": 0
+    },
+    "amount_received": {
+      "type": "number",
+      "default": 0
+    },
+    "status": {
+      "type": "string",
+      "default": "Pending"
+    },
+    "invoice_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "payment_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "method": {
+      "type": "string"
+    },
+    "pending_reason": {
+      "type": "string"
+    },
+    "next_reminder": {
+      "type": "string",
+      "format": "date"
+    },
+    "last_follow_up": {
+      "type": "string",
+      "format": "date"
+    },
+    "expected_payment_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "company_id",
+    "title"
+  ]
+}

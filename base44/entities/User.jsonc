@@ -1,0 +1,57 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "role": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "user"
+      ],
+      "default": "user"
+    },
+    "business_name": {
+      "type": "string"
+    },
+    "business_tagline": {
+      "type": "string"
+    },
+    "business_phone": {
+      "type": "string"
+    },
+    "business_email": {
+      "type": "string"
+    },
+    "business_address": {
+      "type": "string"
+    },
+    "business_gstin": {
+      "type": "string"
+    },
+    "invoice_prefix": {
+      "type": "string"
+    },
+    "invoice_terms": {
+      "type": "string"
+    },
+    "payment_instructions": {
+      "type": "string"
+    },
+    "notify_tasks": {
+      "type": "boolean",
+      "default": true
+    },
+    "notify_payments": {
+      "type": "boolean",
+      "default": true
+    },
+    "notify_daily": {
+      "type": "boolean",
+      "default": true
+    },
+    "browser_notifications": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

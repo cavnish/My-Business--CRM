@@ -1,0 +1,58 @@
+{
+  "name": "Project",
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "default": "Planned"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "Low",
+        "Medium",
+        "High"
+      ],
+      "default": "Medium"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "deadline": {
+      "type": "string",
+      "format": "date"
+    },
+    "owner": {
+      "type": "string"
+    },
+    "budget": {
+      "type": "number",
+      "default": 0
+    },
+    "fee": {
+      "type": "number",
+      "default": 0
+    },
+    "progress": {
+      "type": "number",
+      "default": 0
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "company_id"
+  ]
+}

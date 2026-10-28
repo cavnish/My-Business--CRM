@@ -1,0 +1,35 @@
+{
+  "name": "CalendarEvent",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "category": {
+      "type": "string",
+      "default": "Custom event"
+    },
+    "region": {
+      "type": "string",
+      "default": "India"
+    },
+    "company_id": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "default": "Planned"
+    }
+  },
+  "required": [
+    "title",
+    "date"
+  ]
+}

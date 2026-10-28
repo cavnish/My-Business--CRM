@@ -1,0 +1,73 @@
+{
+  "name": "Lead",
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "company_name": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string",
+      "default": "Manual entry"
+    },
+    "service": {
+      "type": "string"
+    },
+    "estimated_value": {
+      "type": "number",
+      "default": 0
+    },
+    "status": {
+      "type": "string",
+      "default": "New Lead"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "Low",
+        "Medium",
+        "High"
+      ],
+      "default": "Medium"
+    },
+    "owner": {
+      "type": "string"
+    },
+    "next_follow_up": {
+      "type": "string",
+      "format": "date"
+    },
+    "last_contact": {
+      "type": "string",
+      "format": "date"
+    },
+    "expected_close": {
+      "type": "string",
+      "format": "date"
+    },
+    "lost_reason": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "company_id"
+  ]
+}

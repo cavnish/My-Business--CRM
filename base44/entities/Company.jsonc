@@ -1,0 +1,118 @@
+{
+  "name": "Company",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "domain": {
+      "type": "string"
+    },
+    "industry": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "contact_person": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "address": {
+      "type": "string"
+    },
+    "logo_url": {
+      "type": "string"
+    },
+    "brand_color": {
+      "type": "string",
+      "default": "#1F4D3D"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "lead",
+        "active",
+        "paused",
+        "completed",
+        "inactive"
+      ],
+      "default": "active"
+    },
+    "service_package": {
+      "type": "string"
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "monthly_fee": {
+      "type": "number",
+      "default": 0
+    },
+    "commission_rate": {
+      "type": "number",
+      "default": 0
+    },
+    "tax_rate": {
+      "type": "number",
+      "default": 18
+    },
+    "billing_cycle": {
+      "type": "string",
+      "default": "Monthly"
+    },
+    "contract_start": {
+      "type": "string",
+      "format": "date"
+    },
+    "payment_terms": {
+      "type": "string",
+      "default": "Net 15"
+    },
+    "hosting_provider": {
+      "type": "string"
+    },
+    "domain_registrar": {
+      "type": "string"
+    },
+    "domain_expiry": {
+      "type": "string",
+      "format": "date"
+    },
+    "deployment_platform": {
+      "type": "string"
+    },
+    "framework": {
+      "type": "string"
+    },
+    "repository_url": {
+      "type": "string"
+    },
+    "database_provider": {
+      "type": "string"
+    },
+    "analytics_id": {
+      "type": "string"
+    },
+    "admin_url": {
+      "type": "string"
+    },
+    "website_notes": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

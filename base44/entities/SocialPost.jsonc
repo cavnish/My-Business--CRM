@@ -1,0 +1,50 @@
+{
+  "name": "SocialPost",
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string",
+      "default": "Instagram"
+    },
+    "title": {
+      "type": "string"
+    },
+    "campaign": {
+      "type": "string"
+    },
+    "post_type": {
+      "type": "string",
+      "default": "Image"
+    },
+    "caption": {
+      "type": "string"
+    },
+    "hashtags": {
+      "type": "string"
+    },
+    "scheduled_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "status": {
+      "type": "string",
+      "default": "Idea"
+    },
+    "published_url": {
+      "type": "string"
+    },
+    "media_url": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "company_id"
+  ]
+}
